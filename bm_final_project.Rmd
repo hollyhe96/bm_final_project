@@ -12,4 +12,8 @@ library(tidyverse)
 
 ## 
 
+```{r}
+cancer = read_csv("./Cancer_Registry.csv")
+```
+
 ##
