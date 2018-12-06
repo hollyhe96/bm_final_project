@@ -1,0 +1,14 @@
+---
+title: "bm_final_project"
+author: "Yun He"
+date: "December 6, 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 
+
+##
