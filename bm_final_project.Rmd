@@ -8,19 +8,57 @@ output: pdf_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(faraway)
+library(leaps)
+library(caret)
+library(boot)
+library(broom)
 ```
 
-## 
+```{r}
+cancer = read_csv("./Cancer_Registry.csv")
+colSums(is.na(cancer)) # 'PctSomeCol18_24', 'PctEmployed16_Over','PctPrivateCoverageAlone' should be removed because they have lots of NA.  
+```
 
 ```{r}
 cancer = read_csv("./Cancer_Registry.csv") %>% 
- mutate(medIncome = as.numeric(medIncome)) %>% 
-  mutate(income_cutoff = ifelse(medIncome >= 47000,1,0)) %>% 
-  separate(Geography, into = c("County", "State"), sep = ",") %>% 
-  select(-PctSomeCol18_24) # ‘PctSomeCol18_24’ column should not be included because there are too many missing values.
-  colSums(is.na(cancer)) # there is no missing values 
-cancer = cancer %>% 
-  select(-binnedInc, -PctNoHS18_24, -avgAnnCount, -avgDeathsPerYear) %>% 
-  group_by(State) 
+  select(-PctSomeCol18_24, -PctEmployed16_Over, -PctPrivateCoverageAlone) %>% 
+  # set the cutoff for low and high income as 47k
+  mutate(medIncome = as.numeric(medIncome)) %>% 
+  mutate(income_cutoff = ifelse(medIncome >= mean(cancer$medIncome),1,0)) %>%
+  # set the cutoff for age at mean median age 
+  mutate(age_cutoff = ifelse(MedianAge >= mean(cancer$MedianAge),1,0)) %>%
+  separate(Geography, into = c("County", "State"), sep = ",") %>%
+  # remove unnecessary columns 'binnedInc'sicne we have already set the cutoff for income and 'PctNoHS18_24' should be removed because there is no corresponding variable for people who are 25 and over.
+  select(-binnedInc, -PctNoHS18_24) %>% 
+  # make dependent variable at 1st column 
+  select(TARGET_deathRate, everything())
+  # see the correlation
+cancer_cor = cancer %>% 
+  select(-State, -County)
+cor(cancer_cor) %>% knitr::kable()
+  # get descriptive information of cancer 
+attach(cancer)
+summary(cancer)
 ```
-'avgAnnCount' and 'avgDeathsPerYear' should be removed because we are not measuring the average value. 'binnedInc' should be removed because we have already set the cutoff for median income. ‘PctSomeCol18_24’ column should not be included because there are too many missing values. 'PctNoHS18_24' should be removed because there is no corresponding variable for people who are 25 and over.
+
+```{r}
+multi.fit <- lm(TARGET_deathRate ~ ., data = cancer)
+summary(multi.fit)
+```
+
+```{r}
+  # select 10 variables that we choosen after compare with the information from the research literature 
+cancer_model = cancer %>% 
+  select(TARGET_deathRate, avgAnnCount, incidenceRate, AvgHouseholdSize, studyPerCap, income_cutoff, age_cutoff, PercentMarried, PctPrivateCoverage, PctWhite)  
+ # make histogram to see the distribution of the variables and decide whether we need transformation 
+cancer_model %>%
+  select(-income_cutoff, -age_cutoff) %>%
+  gather(measure, value) %>%
+  ggplot(aes(value)) +
+  facet_wrap(. ~ measure, scales = "free") +
+  geom_histogram()
+ # all the correlation value are below 0.7, so there is no covariances. 
+ cor(cancer_model) %>% knitr::kable()
+```
+
