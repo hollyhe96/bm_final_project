@@ -43,14 +43,15 @@ summary(cancer)
 ```
 
 ```{r}
-multi.fit <- lm(TARGET_deathRate ~ ., data = cancer)
+ # make multilinear regression model to see which variables are significant 
+multi.fit <- lm(TARGET_deathRate ~ ., data = cancer_cor)
 summary(multi.fit)
 ```
 
 ```{r}
   # select 10 variables that we choosen after compare with the information from the research literature 
 cancer_model = cancer %>% 
-  select(TARGET_deathRate, avgAnnCount, incidenceRate, AvgHouseholdSize, studyPerCap, income_cutoff, age_cutoff, PercentMarried, PctPrivateCoverage, PctWhite)  
+  select(TARGET_deathRate, avgAnnCount, incidenceRate, AvgHouseholdSize, studyPerCap, income_cutoff, age_cutoff, PercentMarried, PctPrivateCoverage, PctWhite, PctHS25_Over)  
  # make histogram to see the distribution of the variables and decide whether we need transformation 
 cancer_model %>%
   select(-income_cutoff, -age_cutoff) %>%
