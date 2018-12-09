@@ -8,12 +8,15 @@ output: pdf_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(glmnet)
+library(HH)
+
 library(faraway)
 library(leaps)
 library(caret)
 library(boot)
 library(broom)
-library(glmnet)
+
 ```
 
 ```{r}
@@ -64,20 +67,17 @@ cancer_model %>%
  cor(cancer_model) %>% knitr::kable()
 ```
 
-## Data cleaning and exploration
+## Data cleaning 
 
 ```{r}
 cancer = read_csv("./Cancer_Registry.csv") %>% 
   janitor::clean_names() %>% 
   separate(geography, into = c("county", "state"), sep = ",")
 
+## Check with missing values
 skimr::skim(cancer %>% select(-state, -county))
-cor(cancer$med_income, cancer$poverty_percent)
-cor(cancer$percent_married, cancer$pct_married_households)
 
-cancer %>% 
-  ggplot(aes(x = poverty_percent, y = target_death_rate)) + geom_point()
-
+## Select variables
 cancer = cancer %>% 
   select(-avg_ann_count, -avg_deaths_per_year, -pop_est2015, -med_income, -poverty_percent, -median_age_male, -median_age_female, -avg_household_size, -pct_some_col18_24, -pct_private_coverage_alone, -birth_rate, -pct_married_households) %>% 
   select(state, county, target_death_rate, everything()) %>% 
@@ -87,11 +87,34 @@ cancer = cancer %>%
          age_cat = ifelse(median_age > 20 & median_age <= 39, 0, 1)) %>% 
   select(-study_per_cap, -median_age)
 
-## distribution of death rate
+
+```
+
+The original dataset has 35 variables and 3047 observations. After exploring the dataset, we found that variables 'pct_employed16_over', 'pct_private_coverage_alone' and 'pct_some_col18_24' had missing values. Variables 'pct_private_coverage_alone' and 'pct_some_col18_24' has to be removed for subsequent analyses because of the relatively large amount of missing values. We chose the variable 'binned_inc' from 'med_income', 'poverty_percent' and 'binned_inc' for measuring the income level. We chose 'percent_married' from 'percent_married' and 'pct_married_households' for measuring the married status. We also chose 'incidence_rate' from 'avg_ann_count' and 'incidence_rate' for measuring mean cancer diagnoses annually. We chose 'median_age' from 'median_age', 'median_age_female' and 'median_age_male' for measuring the age. In addition, because our outcome is 'target_death_rate' which can be calculated from dividing the variable 'avg_deaths_per_year' by the variable 'pop_est2015', we removed these two variables from our dataset. 'avg_household_size' and 'birth_rate' seem to be uncorrelated with the outcome, thus, we removed them from our dataset as well. We ended with the dataset of 23 variables and 3047 observations.
+
+## Data exploration
+
+```{r}
+## Distribution of continuous variables
+descp_stats = function(x){
+  df = broom::tidy(summary(x)) %>% 
+    mutate(sd = sd(x))
+  return(df)
+}
+
+cancer %>% 
+  select(-state, -county, -binned_inc, -ct_status, -age_cat) %>% 
+  map_df(descp_stats) %>%
+  mutate(variable = c("target_death_rate", "incidence_rate", "percent_married", "pct_no_hs18_24", "pct_hs18_24", "pct_bach_deg18_24", "pct_hs25_over", "pct_bach_deg25_over", "pct_employed16_over", "pct_unemployed16_over", "pct_private_coverage", "pct_emp_priv_coverage", "pct_public_coverage", "pct_public_coverage_alone", "pct_white", "pct_black", "pct_asian", "pct_other_race")) %>% 
+  dplyr::select(variable, mean, sd, everything()) %>%
+  knitr::kable(digits = 2)
+
+## Distribution of the death rate
 cancer %>%
   ggplot(aes(x = target_death_rate)) + 
   geom_histogram(aes(y = ..density..)) + geom_density(color = "red")
 
+## Distribution of categorical variables
 cancer %>% 
   ggplot(aes(x = binned_inc, y = target_death_rate)) + geom_boxplot() +
   theme(axis.text.x = element_text(angle = 60, hjust = 1))
@@ -100,10 +123,10 @@ cancer %>%
   ggplot(aes(x = factor(ct_status), y = target_death_rate)) + geom_boxplot()
 
 cancer %>% 
-  ggplot(aes(x = factor(income_status), y = target_death_rate)) + geom_boxplot()
-
-
+  ggplot(aes(x = factor(age_cat), y = target_death_rate)) + geom_boxplot()
 ```
+
+The outcome 'death rate' is normally distributed.
 
 ## Fit the model
 
@@ -114,6 +137,18 @@ fit = lm(target_death_rate ~ ., data = cancer_mod)
 summary(fit)
 
 step(fit, direction = "backward")
+refit = lm(target_death_rate ~ incidence_rate + binned_inc + 
+    pct_no_hs18_24 + pct_hs18_24 + pct_hs25_over + pct_bach_deg25_over + 
+    pct_employed16_over + pct_private_coverage + pct_emp_priv_coverage + 
+    pct_public_coverage + pct_public_coverage_alone + pct_white + 
+    pct_other_race, data = cancer_mod)
+vif(refit)
+
+model_fit = lm(target_death_rate ~ incidence_rate + binned_inc + 
+    pct_no_hs18_24 + pct_hs18_24 + pct_hs25_over + pct_bach_deg25_over + 
+    pct_employed16_over + pct_emp_priv_coverage + pct_white + 
+    pct_other_race, data = cancer_mod) 
+summary(model_fit)
 
 
 ## Lasso regression
