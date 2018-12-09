@@ -79,18 +79,16 @@ skimr::skim(cancer %>% select(-state, -county))
 
 ## Select variables
 cancer = cancer %>% 
-  select(-avg_ann_count, -avg_deaths_per_year, -pop_est2015, -med_income, -poverty_percent, -median_age_male, -median_age_female, -avg_household_size, -pct_some_col18_24, -pct_private_coverage_alone, -birth_rate, -pct_married_households) %>% 
-  select(state, county, target_death_rate, everything()) %>% 
+  dplyr::select(-avg_ann_count, -avg_deaths_per_year, -pop_est2015, -med_income, -poverty_percent, -median_age_male, -median_age_female, -avg_household_size, -pct_some_col18_24, -pct_private_coverage_alone, -birth_rate, -pct_married_households) %>% 
+  dplyr::select(state, county, target_death_rate, everything()) %>% 
   mutate(binned_inc = factor(binned_inc),
          binned_inc = relevel(binned_inc, ref = "[22640, 34218.1]"),
          ct_status = ifelse(study_per_cap == 0, 0, 1),
          age_cat = ifelse(median_age > 20 & median_age <= 39, 0, 1)) %>% 
-  select(-study_per_cap, -median_age)
-
-
+  dplyr::select(-study_per_cap, -median_age)
 ```
 
-The original dataset has 35 variables and 3047 observations. After exploring the dataset, we found that variables 'pct_employed16_over', 'pct_private_coverage_alone' and 'pct_some_col18_24' had missing values. Variables 'pct_private_coverage_alone' and 'pct_some_col18_24' has to be removed for subsequent analyses because of the relatively large amount of missing values. We chose the variable 'binned_inc' from 'med_income', 'poverty_percent' and 'binned_inc' for measuring the income level. We chose 'percent_married' from 'percent_married' and 'pct_married_households' for measuring the married status. We also chose 'incidence_rate' from 'avg_ann_count' and 'incidence_rate' for measuring mean cancer diagnoses annually. We chose 'median_age' from 'median_age', 'median_age_female' and 'median_age_male' for measuring the age. In addition, because our outcome is 'target_death_rate' which can be calculated from dividing the variable 'avg_deaths_per_year' by the variable 'pop_est2015', we removed these two variables from our dataset. 'avg_household_size' and 'birth_rate' seem to be uncorrelated with the outcome, thus, we removed them from our dataset as well. We ended with the dataset of 23 variables and 3047 observations.
+The original dataset has 34 variables and 3047 observations. After exploring the dataset, we found that variables 'pct_employed16_over', 'pct_private_coverage_alone' and 'pct_some_col18_24' had missing values. Variables 'pct_private_coverage_alone' and 'pct_some_col18_24' has to be removed for subsequent analyses because of the relatively large amount of missing values. We chose the variable 'binned_inc' from 'med_income', 'poverty_percent' and 'binned_inc' for measuring the income level. We chose 'percent_married' from 'percent_married' and 'pct_married_households' for measuring the married status. We also chose 'incidence_rate' from 'avg_ann_count' and 'incidence_rate' for measuring mean cancer diagnoses annually. We chose 'median_age' from 'median_age', 'median_age_female' and 'median_age_male' for measuring the age. In addition, because our outcome is 'target_death_rate' which can be calculated from dividing the variable 'avg_deaths_per_year' by the variable 'pop_est2015', we removed these two variables from our dataset. 'avg_household_size' and 'birth_rate' seem to be uncorrelated with the outcome, thus, we removed them from our dataset as well. We ended with the dataset of 23 variables and 3047 observations.
 
 ## Data exploration
 
@@ -103,7 +101,7 @@ descp_stats = function(x){
 }
 
 cancer %>% 
-  select(-state, -county, -binned_inc, -ct_status, -age_cat) %>% 
+  dplyr::select(-state, -county, -binned_inc, -ct_status, -age_cat) %>% 
   map_df(descp_stats) %>%
   mutate(variable = c("target_death_rate", "incidence_rate", "percent_married", "pct_no_hs18_24", "pct_hs18_24", "pct_bach_deg18_24", "pct_hs25_over", "pct_bach_deg25_over", "pct_employed16_over", "pct_unemployed16_over", "pct_private_coverage", "pct_emp_priv_coverage", "pct_public_coverage", "pct_public_coverage_alone", "pct_white", "pct_black", "pct_asian", "pct_other_race")) %>% 
   dplyr::select(variable, mean, sd, everything()) %>%
@@ -132,7 +130,8 @@ The outcome 'death rate' is normally distributed.
 
 ```{r}
 cancer_mod = cancer %>% 
-  select(-state, -county)
+  dplyr::select(-state, -county)
+
 fit = lm(target_death_rate ~ ., data = cancer_mod)
 summary(fit)
 
@@ -149,9 +148,27 @@ model_fit = lm(target_death_rate ~ incidence_rate + binned_inc +
     pct_employed16_over + pct_emp_priv_coverage + pct_white + 
     pct_other_race, data = cancer_mod) 
 summary(model_fit)
+plot(model_fit)
 
+
+
+```
 
 ## Lasso regression
+
+```{r}
+cancer = cancer %>% 
+  dplyr::select(-avg_ann_count, -avg_deaths_per_year, -pop_est2015, -binned_inc, -poverty_percent, -median_age_male, -median_age_female, -avg_household_size, -pct_some_col18_24, -pct_private_coverage_alone, -birth_rate, -pct_married_households) %>% 
+  dplyr::select(state, county, target_death_rate, everything()) %>% 
+  mutate(ct_status = ifelse(study_per_cap == 0, 0, 1),
+         age_cat = ifelse(median_age > 20 & median_age <= 39, 0, 1)) %>% 
+  dplyr::select(-study_per_cap, -median_age)
+
+cancer_mod = cancer %>% 
+  dplyr::select(-state, -county, -pct_employed16_over) %>% 
+  dplyr::select(target_death_rate, incidence_rate, med_income, pct_no_hs18_24, pct_hs18_24, pct_hs25_over, pct_bach_deg25_over, pct_emp_priv_coverage, pct_white, pct_other_race)
+
+## no NA
 Y <- as.matrix(cancer_mod[,1])
 X <- as.matrix(cancer_mod[,-1])
 grid <- 10^seq(5,-2, length=100)
@@ -163,6 +180,5 @@ plot(cv.out)
 best.lambda<-cv.out$lambda.min
 lasso2<-glmnet(X, Y, alpha =1, lambda=best.lambda)
 coef(lasso2)
-
 ```
 
