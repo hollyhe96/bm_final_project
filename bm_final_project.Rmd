@@ -74,21 +74,54 @@ cancer = read_csv("./Cancer_Registry.csv") %>%
   janitor::clean_names() %>% 
   separate(geography, into = c("county", "state"), sep = ",")
 
+## demographic: age, race, marital status, income, education, employment and health insurance coverage
+income_employ_insur = cancer %>% 
+  dplyr::select(med_income, pct_employed16_over, pct_unemployed16_over, pct_private_coverage, pct_private_coverage_alone, pct_emp_priv_coverage, pct_public_coverage, pct_public_coverage_alone)
+cor(income_employ_insur)
+## income and health insurance coverage are highly correlated
+
+income_edu = cancer %>% 
+  dplyr::select(med_income, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_bach_deg25_over)
+cor(income_edu) 
+## high correlation between med_income and pct_bach_deg25_over, pct_hs25_over and pct_bach_deg25_over, so choose pct_hs25_over
+
+race = cancer %>% 
+  dplyr::select(pct_white, pct_black, pct_asian, pct_other_race)
+cor(race)
+## white and black are highly correlated
+
 ## Check with missing values
 skimr::skim(cancer %>% select(-state, -county))
 
 ## Select variables
 cancer = cancer %>% 
-  dplyr::select(-avg_ann_count, -avg_deaths_per_year, -pop_est2015, -med_income, -poverty_percent, -median_age_male, -median_age_female, -avg_household_size, -pct_some_col18_24, -pct_private_coverage_alone, -birth_rate, -pct_married_households) %>% 
-  dplyr::select(state, county, target_death_rate, everything()) %>% 
+  dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, binned_inc, median_age, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race) %>% 
   mutate(binned_inc = factor(binned_inc),
          binned_inc = relevel(binned_inc, ref = "[22640, 34218.1]"),
-         ct_status = ifelse(study_per_cap == 0, 0, 1),
          age_cat = ifelse(median_age > 20 & median_age <= 39, 0, 1)) %>% 
-  dplyr::select(-study_per_cap, -median_age)
+  dplyr::select(-median_age)
+
+cancer = cancer %>% 
+  dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, binned_inc, median_age, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race) %>% 
+  mutate(binned_inc = factor(binned_inc),
+         binned_inc = relevel(binned_inc, ref = "[22640, 34218.1]"))
+## do we have to categorize age?
 ```
 
-The original dataset has 34 variables and 3047 observations. After exploring the dataset, we found that variables 'pct_employed16_over', 'pct_private_coverage_alone' and 'pct_some_col18_24' had missing values. Variables 'pct_private_coverage_alone' and 'pct_some_col18_24' has to be removed for subsequent analyses because of the relatively large amount of missing values. We chose the variable 'binned_inc' from 'med_income', 'poverty_percent' and 'binned_inc' for measuring the income level. We chose 'percent_married' from 'percent_married' and 'pct_married_households' for measuring the married status. We also chose 'incidence_rate' from 'avg_ann_count' and 'incidence_rate' for measuring mean cancer diagnoses annually. We chose 'median_age' from 'median_age', 'median_age_female' and 'median_age_male' for measuring the age. In addition, because our outcome is 'target_death_rate' which can be calculated from dividing the variable 'avg_deaths_per_year' by the variable 'pop_est2015', we removed these two variables from our dataset. 'avg_household_size' and 'birth_rate' seem to be uncorrelated with the outcome, thus, we removed them from our dataset as well. We ended with the dataset of 23 variables and 3047 observations.
+The original dataset has 35 variables and 3047 observations. 
+
+After exploring the dataset, we found that variables 'pct_employed16_over', 'pct_private_coverage_alone' and 'pct_some_col18_24' had missing values. Variables 'pct_private_coverage_alone' and 'pct_some_col18_24' has to be removed for subsequent analyses because of the relatively large amount of missing values. 
+
+Both employment status and health insurance coverage status can be reflected by income. Thus, we only included income for subsequent analyses. We chose the variable 'binned_inc' from 'med_income', 'poverty_percent' and 'binned_inc' for measuring the income level. We chose 'percent_married' from 'percent_married' and 'pct_married_households' for measuring the marital status. We chose 'median_age' from 'median_age', 'median_age_female' and 'median_age_male' for measuring the age. 'pct_white' and 'pct_black' are highly correlated, thus, we removed 'pct_black'. 'pct_hs25_over' and 'pct_bach_deg25_over' re highly correlated, thus, we removed 'pct_bach_deg25_over'. Finally, we included demographic variables for age, income, race, education and marital status for subsequent analyses which, in previous research, are also found to be correlated with cancer mortality. 
+
+We also chose 'incidence_rate' from 'avg_ann_count' and 'incidence_rate' for measuring mean cancer diagnoses annually. 
+
+In addition, because our outcome is 'target_death_rate' which can be calculated from dividing the variable 'avg_deaths_per_year' by the variable 'pop_est2015', we removed these two variables from our dataset. 'avg_household_size' and 'birth_rate' seem to be uncorrelated with the outcome, thus, we removed them from our dataset as well. 
+
+We ended with the dataset of 15 variables and 3047 observations.
+
+Marital status is also correlated with cancer mortality. 
+https://www.ncbi.nlm.nih.gov/pubmed/29727804
 
 ## Data exploration
 
@@ -101,9 +134,9 @@ descp_stats = function(x){
 }
 
 cancer %>% 
-  dplyr::select(-state, -county, -binned_inc, -ct_status, -age_cat) %>% 
+  dplyr::select(-state, -county, -binned_inc, -age_cat) %>% 
   map_df(descp_stats) %>%
-  mutate(variable = c("target_death_rate", "incidence_rate", "percent_married", "pct_no_hs18_24", "pct_hs18_24", "pct_bach_deg18_24", "pct_hs25_over", "pct_bach_deg25_over", "pct_employed16_over", "pct_unemployed16_over", "pct_private_coverage", "pct_emp_priv_coverage", "pct_public_coverage", "pct_public_coverage_alone", "pct_white", "pct_black", "pct_asian", "pct_other_race")) %>% 
+  mutate(variable = c("target_death_rate", "incidence_rate", "study_per_cap", "percent_married", "pct_no_hs18_24", "pct_hs18_24", "pct_bach_deg18_24", "pct_hs25_over", "pct_white", "pct_asian", "pct_other_race")) %>% 
   dplyr::select(variable, mean, sd, everything()) %>%
   knitr::kable(digits = 2)
 
@@ -116,9 +149,6 @@ cancer %>%
 cancer %>% 
   ggplot(aes(x = binned_inc, y = target_death_rate)) + geom_boxplot() +
   theme(axis.text.x = element_text(angle = 60, hjust = 1))
-
-cancer %>% 
-  ggplot(aes(x = factor(ct_status), y = target_death_rate)) + geom_boxplot()
 
 cancer %>% 
   ggplot(aes(x = factor(age_cat), y = target_death_rate)) + geom_boxplot()
@@ -137,20 +167,9 @@ summary(fit)
 
 step(fit, direction = "backward")
 refit = lm(target_death_rate ~ incidence_rate + binned_inc + 
-    pct_no_hs18_24 + pct_hs18_24 + pct_hs25_over + pct_bach_deg25_over + 
-    pct_employed16_over + pct_private_coverage + pct_emp_priv_coverage + 
-    pct_public_coverage + pct_public_coverage_alone + pct_white + 
-    pct_other_race, data = cancer_mod)
+    percent_married + pct_hs18_24 + pct_bach_deg18_24 + pct_hs25_over + 
+    pct_white + pct_other_race + age_cat, data = cancer_mod)
 vif(refit)
-
-model_fit = lm(target_death_rate ~ incidence_rate + binned_inc + 
-    pct_no_hs18_24 + pct_hs18_24 + pct_hs25_over + pct_bach_deg25_over + 
-    pct_employed16_over + pct_emp_priv_coverage + pct_white + 
-    pct_other_race, data = cancer_mod) 
-summary(model_fit)
-plot(model_fit)
-
-
 
 ```
 
@@ -158,15 +177,12 @@ plot(model_fit)
 
 ```{r}
 cancer = cancer %>% 
-  dplyr::select(-avg_ann_count, -avg_deaths_per_year, -pop_est2015, -binned_inc, -poverty_percent, -median_age_male, -median_age_female, -avg_household_size, -pct_some_col18_24, -pct_private_coverage_alone, -birth_rate, -pct_married_households) %>% 
-  dplyr::select(state, county, target_death_rate, everything()) %>% 
-  mutate(ct_status = ifelse(study_per_cap == 0, 0, 1),
-         age_cat = ifelse(median_age > 20 & median_age <= 39, 0, 1)) %>% 
-  dplyr::select(-study_per_cap, -median_age)
+  dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, med_income, median_age, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race) %>% 
+  mutate(age_cat = ifelse(median_age > 20 & median_age <= 39, 0, 1)) %>% 
+  dplyr::select(-median_age)
 
 cancer_mod = cancer %>% 
-  dplyr::select(-state, -county, -pct_employed16_over) %>% 
-  dplyr::select(target_death_rate, incidence_rate, med_income, pct_no_hs18_24, pct_hs18_24, pct_hs25_over, pct_bach_deg25_over, pct_emp_priv_coverage, pct_white, pct_other_race)
+  dplyr::select(-state, -county)
 
 ## no NA
 Y <- as.matrix(cancer_mod[,1])
