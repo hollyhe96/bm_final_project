@@ -10,61 +10,6 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(glmnet)
 library(HH)
-
-library(faraway)
-library(leaps)
-library(caret)
-library(boot)
-library(broom)
-
-```
-
-```{r}
-cancer = read_csv("./Cancer_Registry.csv")
-colSums(is.na(cancer)) # 'PctSomeCol18_24', 'PctEmployed16_Over','PctPrivateCoverageAlone' should be removed because they have lots of NA.  
-```
-
-```{r}
-cancer = read_csv("./Cancer_Registry.csv") %>% 
-  select(-PctSomeCol18_24, -PctEmployed16_Over, -PctPrivateCoverageAlone) %>% 
-  # set the cutoff for low and high income as 47k
-  mutate(medIncome = as.numeric(medIncome)) %>% 
-  mutate(income_cutoff = ifelse(medIncome >= mean(cancer$medIncome),1,0)) %>%
-  # set the cutoff for age at mean median age 
-  mutate(age_cutoff = ifelse(MedianAge >= mean(cancer$MedianAge),1,0)) %>%
-  separate(Geography, into = c("County", "State"), sep = ",") %>%
-  # remove unnecessary columns 'binnedInc'sicne we have already set the cutoff for income and 'PctNoHS18_24' should be removed because there is no corresponding variable for people who are 25 and over.
-  select(-binnedInc, -PctNoHS18_24) %>% 
-  # make dependent variable at 1st column 
-  select(TARGET_deathRate, everything())
-  # see the correlation
-cancer_cor = cancer %>% 
-  select(-State, -County)
-cor(cancer_cor) %>% knitr::kable()
-  # get descriptive information of cancer 
-attach(cancer)
-summary(cancer)
-```
-
-```{r}
- # make multilinear regression model to see which variables are significant 
-multi.fit <- lm(TARGET_deathRate ~ ., data = cancer_cor)
-summary(multi.fit)
-```
-
-```{r}
-  # select 10 variables that we choosen after compare with the information from the research literature 
-cancer_model = cancer %>% 
-  select(TARGET_deathRate, avgAnnCount, incidenceRate, AvgHouseholdSize, studyPerCap, income_cutoff, age_cutoff, PercentMarried, PctPrivateCoverage, PctWhite, PctHS25_Over)  
- # make histogram to see the distribution of the variables and decide whether we need transformation 
-cancer_model %>%
-  select(-income_cutoff, -age_cutoff) %>%
-  gather(measure, value) %>%
-  ggplot(aes(value)) +
-  facet_wrap(. ~ measure, scales = "free") +
-  geom_histogram()
- # all the correlation value are below 0.7, so there is no covariances. 
- cor(cancer_model) %>% knitr::kable()
 ```
 
 ## Data cleaning 
@@ -75,50 +20,53 @@ cancer = read_csv("./Cancer_Registry.csv") %>%
   separate(geography, into = c("county", "state"), sep = ",")
 
 ## demographic: age, race, marital status, income, education, employment and health insurance coverage
+
+library(patchwork)
+male = cancer %>% 
+  ggplot(aes(x = median_age_male)) + geom_histogram() + xlim(20, 66)
+
+female = cancer %>% 
+  ggplot(aes(x = median_age_female)) + geom_histogram() + xlim(20, 66)
+male + female
+## chose median_age_female for age
+
 income_employ_insur = cancer %>% 
   dplyr::select(med_income, pct_employed16_over, pct_unemployed16_over, pct_private_coverage, pct_private_coverage_alone, pct_emp_priv_coverage, pct_public_coverage, pct_public_coverage_alone)
 cor(income_employ_insur)
 ## income and health insurance coverage are highly correlated
 
 income_edu = cancer %>% 
-  dplyr::select(med_income, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_bach_deg25_over)
+  dplyr::select(target_death_rate, med_income, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_bach_deg25_over)
 cor(income_edu) 
 ## high correlation between med_income and pct_bach_deg25_over, pct_hs25_over and pct_bach_deg25_over, so choose pct_hs25_over
-
-race = cancer %>% 
-  dplyr::select(pct_white, pct_black, pct_asian, pct_other_race)
-cor(race)
-## white and black are highly correlated
 
 ## Check with missing values
 skimr::skim(cancer %>% select(-state, -county))
 
+## define cutoff points
+summary(cancer$median_age_female) ##mean
+summary(cancer$med_income) ##quantile
+
 ## Select variables
 cancer = cancer %>% 
-  dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, binned_inc, median_age, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race) %>% 
-  mutate(binned_inc = factor(binned_inc),
-         binned_inc = relevel(binned_inc, ref = "[22640, 34218.1]"),
-         age_cat = ifelse(median_age > 20 & median_age <= 39, 0, 1)) %>% 
-  dplyr::select(-median_age)
+  dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, binned_inc, median_age_female, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race) %>% 
+  mutate(binned_inc = ifelse(binned_inc %in% c("[22640, 34218.1]", "(34218.1, 37413.8]", "(37413.8, 40362.7]"), "low", ifelse(binned_inc %in% c("(54545.6, 61494.5]", "(61494.5, 125635]"), "high", "medium")),
+         binned_inc = factor(binned_inc, levels = c("low", "medium", "high")),
+         age_cat = ifelse(median_age_female > 20 & median_age_female <= 42, "young", "old")) %>% 
+  dplyr::select(-median_age_female)
 
-cancer = cancer %>% 
-  dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, binned_inc, median_age, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race) %>% 
-  mutate(binned_inc = factor(binned_inc),
-         binned_inc = relevel(binned_inc, ref = "[22640, 34218.1]"))
-## do we have to categorize age?
 ```
 
 The original dataset has 35 variables and 3047 observations. 
 
-After exploring the dataset, we found that variables 'pct_employed16_over', 'pct_private_coverage_alone' and 'pct_some_col18_24' had missing values. Variables 'pct_private_coverage_alone' and 'pct_some_col18_24' has to be removed for subsequent analyses because of the relatively large amount of missing values. 
+Both employment status and health insurance coverage status can be reflected by income. Thus, we only included income for subsequent analyses. We chose the variable 'binned_inc' from 'med_income', 'poverty_percent' and 'binned_inc' for measuring the income level. We combined some of its levels and divided income into 3 levels which are "low", "medium" and "high". We chose 'percent_married' from 'percent_married' and 'pct_married_households' for measuring the marital status. We chose 'median_age_female' from 'median_age', 'median_age_female' and 'median_age_male' for measuring the age. 'pct_white' and 'pct_black' are highly correlated, thus, we removed 'pct_black'. 'pct_hs25_over' and 'pct_bach_deg25_over' re highly correlated, thus, we removed 'pct_bach_deg25_over'. Finally, we included demographic variables for age, income, race, education and marital status for subsequent analyses which, in previous research, are also found to be correlated with cancer mortality.
 
-Both employment status and health insurance coverage status can be reflected by income. Thus, we only included income for subsequent analyses. We chose the variable 'binned_inc' from 'med_income', 'poverty_percent' and 'binned_inc' for measuring the income level. We chose 'percent_married' from 'percent_married' and 'pct_married_households' for measuring the marital status. We chose 'median_age' from 'median_age', 'median_age_female' and 'median_age_male' for measuring the age. 'pct_white' and 'pct_black' are highly correlated, thus, we removed 'pct_black'. 'pct_hs25_over' and 'pct_bach_deg25_over' re highly correlated, thus, we removed 'pct_bach_deg25_over'. Finally, we included demographic variables for age, income, race, education and marital status for subsequent analyses which, in previous research, are also found to be correlated with cancer mortality. 
-
-We also chose 'incidence_rate' from 'avg_ann_count' and 'incidence_rate' for measuring mean cancer diagnoses annually. 
+'pct_some_col18_24' was removed because of the relatively large amount of missing values. 
+We chose 'incidence_rate' from 'avg_ann_count' and 'incidence_rate' for measuring mean cancer diagnoses annually. We also remained the variable 'study_per_cap' for measuring number of cancer-related clinical trials per county. 
 
 In addition, because our outcome is 'target_death_rate' which can be calculated from dividing the variable 'avg_deaths_per_year' by the variable 'pop_est2015', we removed these two variables from our dataset. 'avg_household_size' and 'birth_rate' seem to be uncorrelated with the outcome, thus, we removed them from our dataset as well. 
 
-We ended with the dataset of 15 variables and 3047 observations.
+We ended with the dataset of 15 variables and 3047 observations. 
 
 Marital status is also correlated with cancer mortality. 
 https://www.ncbi.nlm.nih.gov/pubmed/29727804
@@ -143,15 +91,24 @@ cancer %>%
 ## Distribution of the death rate
 cancer %>%
   ggplot(aes(x = target_death_rate)) + 
-  geom_histogram(aes(y = ..density..)) + geom_density(color = "red")
+  geom_histogram(aes(y = ..density..)) + geom_density(color = "red") +
+  labs(x = "Death rate",
+       title = "Distribution of the death rate")
 
 ## Distribution of categorical variables
 cancer %>% 
   ggplot(aes(x = binned_inc, y = target_death_rate)) + geom_boxplot() +
-  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+  labs(x = "Income level", 
+       y = "Death rate",
+       title = "The relationship between income level and death rate")
 
 cancer %>% 
-  ggplot(aes(x = factor(age_cat), y = target_death_rate)) + geom_boxplot()
+  ggplot(aes(x = factor(age_cat), y = target_death_rate)) + geom_boxplot() +
+  labs(x = "Age group", 
+       y = "Death rate",
+       title = "The relationship between age group and death rate")
+
+
 ```
 
 The outcome 'death rate' is normally distributed.
@@ -171,6 +128,8 @@ refit = lm(target_death_rate ~ incidence_rate + binned_inc +
     pct_white + pct_other_race + age_cat, data = cancer_mod)
 vif(refit)
 
+plot(refit)
+influence.measures(refit)
 ```
 
 ## Lasso regression
