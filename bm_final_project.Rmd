@@ -80,9 +80,9 @@ descp_stats = function(x){
 }
 
 cancer %>% 
-  dplyr::select(-state, -county, -binned_inc, -age_cat) %>% 
+  dplyr::select(-state, -county, -binned_inc) %>% 
   map_df(descp_stats) %>%
-  mutate(variable = c("target_death_rate", "incidence_rate", "study_per_cap", "percent_married", "pct_no_hs18_24", "pct_hs18_24", "pct_bach_deg18_24", "pct_hs25_over", "pct_white", "pct_asian", "pct_other_race")) %>% 
+  mutate(variable = c("target_death_rate", "incidence_rate", "study_per_cap", "median_age_female", "percent_married", "pct_no_hs18_24", "pct_hs18_24", "pct_bach_deg18_24", "pct_hs25_over", "pct_white", "pct_asian", "pct_other_race")) %>% 
   dplyr::select(variable, mean, sd, everything()) %>%
   knitr::kable(digits = 2)
 
@@ -99,14 +99,6 @@ cancer %>%
   labs(x = "Income level", 
        y = "Death rate",
        title = "The relationship between income level and death rate")
-
-cancer %>% 
-  ggplot(aes(x = factor(age_cat), y = target_death_rate)) + geom_boxplot() +
-  labs(x = "Age group", 
-       y = "Death rate",
-       title = "The relationship between age group and death rate")
-
-
 ```
 
 The outcome 'death rate' is normally distributed.
@@ -199,30 +191,6 @@ res_ls_ridge_lasso
 ## Cross validation
 
 ```{r}
-library(caret)
-
-# Use 5-fold validation and create the training sets
-
-data_train<-trainControl(method="cv", number=5)
-
-# Fit the 4-variables model that we discussed in previous lectures
-model_caret<-train(target_death_rate ~ incidence_rate + binned_inc + percent_married + pct_hs18_24 + pct_bach_deg18_24 + pct_hs25_over + pct_white + pct_other_race + median_age_female,
-                   data = cancer_mod,
-                   trControl=data_train,
-                   method='lm',
-                   na.action=na.pass)
-
-model_caret<-train(target_death_rate ~ incidence_rate + binned_inc + percent_married + pct_hs25_over + pct_white,
-                   data = cancer_mod,
-                   trControl=data_train,
-                   method='lm',
-                   na.action=na.pass)
-    
-# Model predictions using 4 parts of the data fro training 
-model_caret
-model_caret$resample
-
-
 library(MPV)                           # For PRESS criterion
 
 newsummary <- function(model)
