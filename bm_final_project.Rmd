@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(glmnet)
 library(HH)
+library(leaps)
 ```
 
 ## Data cleaning 
@@ -51,10 +52,7 @@ summary(cancer$med_income) ##quantile
 cancer = cancer %>% 
   dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, binned_inc, median_age_female, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race) %>% 
   mutate(binned_inc = ifelse(binned_inc %in% c("[22640, 34218.1]", "(34218.1, 37413.8]", "(37413.8, 40362.7]"), "low", ifelse(binned_inc %in% c("(54545.6, 61494.5]", "(61494.5, 125635]"), "high", "medium")),
-         binned_inc = factor(binned_inc, levels = c("low", "medium", "high")),
-         age_cat = ifelse(median_age_female > 20 & median_age_female <= 42, "young", "old")) %>% 
-  dplyr::select(-median_age_female)
-
+         binned_inc = factor(binned_inc, levels = c("low", "medium", "high")))
 ```
 
 The original dataset has 35 variables and 3047 observations. 
@@ -115,6 +113,8 @@ The outcome 'death rate' is normally distributed.
 
 ## Fit the model
 
+### backward elimination
+
 ```{r}
 cancer_mod = cancer %>% 
   dplyr::select(-state, -county)
@@ -124,21 +124,54 @@ summary(fit)
 
 step(fit, direction = "backward")
 refit = lm(target_death_rate ~ incidence_rate + binned_inc + 
-    percent_married + pct_hs18_24 + pct_bach_deg18_24 + pct_hs25_over + 
-    pct_white + pct_other_race + age_cat, data = cancer_mod)
-vif(refit)
+    median_age_female + percent_married + pct_hs18_24 + pct_bach_deg18_24 + 
+    pct_hs25_over + pct_white + pct_other_race, data = cancer_mod)
+vif(refit) ## check multicollinearity
+summary(refit)
+
+## check outliers
+### outliers in Y
+stu_res = rstandard(refit)
+stu_res[abs(stu_res) > 2.5]
+
+### leverage
+hat_value = hatvalues(refit)
+hat_value[hat_value > 0.2]
+
+### influential points
+influence.measures(refit)
 
 plot(refit)
-influence.measures(refit)
+
 ```
+
+Model assumptions hold true.
+
+### Cp and adj R2 criteria
+
+```{r}
+b<-regsubsets(target_death_rate ~ ., data=cancer_mod)
+   (rs<-summary(b))
+
+# Plots of Cp and Adj-R2 as functions of parameters
+par(mar=c(4,4,1,1))
+par(mfrow=c(1,2))
+plot(2:10, rs$cp, xlab="No of parameters", ylab="Cp Statistic")
+abline(0,1)
+plot(2:10, rs$adjr2, xlab="No of parameters", ylab="Adj R2")
+
+
+
+```
+
+
+
 
 ## Lasso regression
 
 ```{r}
 cancer = cancer %>% 
-  dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, med_income, median_age, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race) %>% 
-  mutate(age_cat = ifelse(median_age > 20 & median_age <= 39, 0, 1)) %>% 
-  dplyr::select(-median_age)
+  dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, med_income, median_age_female, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race)
 
 cancer_mod = cancer %>% 
   dplyr::select(-state, -county)
@@ -152,8 +185,56 @@ ridge3<-glmnet(X, Y, alpha=1, lambda=grid)
 set.seed(2)
 cv.out<-cv.glmnet(X,Y)
 plot(cv.out)
-best.lambda<-cv.out$lambda.min
+best.lambda<-cv.out$lambda.1se
 lasso2<-glmnet(X, Y, alpha =1, lambda=best.lambda)
 coef(lasso2)
+
+lasso2$dev.ratio
+multi_fit = lm(target_death_rate ~ incidence_rate + study_per_cap + med_income + median_age_female + percent_married + pct_no_hs18_24 + pct_hs18_24 + pct_bach_deg18_24 + pct_hs25_over + pct_white + pct_asian + pct_other_race, data = cancer_mod)
+res_ls_ridge_lasso<- cbind(coef(multi_fit), coef(lasso2))
+colnames(res_ls_ridge_lasso) <- c("LS", "Lasso")
+res_ls_ridge_lasso
+```
+
+## Cross validation
+
+```{r}
+library(caret)
+
+# Use 5-fold validation and create the training sets
+
+data_train<-trainControl(method="cv", number=5)
+
+# Fit the 4-variables model that we discussed in previous lectures
+model_caret<-train(target_death_rate ~ incidence_rate + binned_inc + percent_married + pct_hs18_24 + pct_bach_deg18_24 + pct_hs25_over + pct_white + pct_other_race + median_age_female,
+                   data = cancer_mod,
+                   trControl=data_train,
+                   method='lm',
+                   na.action=na.pass)
+
+model_caret<-train(target_death_rate ~ incidence_rate + binned_inc + percent_married + pct_hs25_over + pct_white,
+                   data = cancer_mod,
+                   trControl=data_train,
+                   method='lm',
+                   na.action=na.pass)
+    
+# Model predictions using 4 parts of the data fro training 
+model_caret
+model_caret$resample
+
+
+library(MPV)                           # For PRESS criterion
+
+newsummary <- function(model)
+{
+    list('coefs'    = round(t(summary(model)$coef[, 1:2]), 4),
+         'criteria' = cbind('SSE'   = anova(model)["Residuals", "Sum Sq"],
+                            'PRESS' = PRESS(model),
+                            'MSE'   = anova(model)["Residuals", "Mean Sq"],
+                            'Rsq'   = summary(model)$adj.r.squared))
+}
+
+newsummary(refit)
+
 ```
 
