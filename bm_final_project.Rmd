@@ -148,9 +148,9 @@ b<-regsubsets(target_death_rate ~ ., data=cancer_mod)
 # Plots of Cp and Adj-R2 as functions of parameters
 par(mar=c(4,4,1,1))
 par(mfrow=c(1,2))
-plot(2:10, rs$cp, xlab="No of parameters", ylab="Cp Statistic")
+plot(2:9, rs$cp, xlab="No of parameters", ylab="Cp Statistic")
 abline(0,1)
-plot(2:10, rs$adjr2, xlab="No of parameters", ylab="Adj R2")
+plot(2:9, rs$adjr2, xlab="No of parameters", ylab="Adj R2")
 
 
 
