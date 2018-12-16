@@ -44,6 +44,14 @@ skimr::skim(cancer %>% select(-state, -county))
 ## Select variables
 cancer = cancer %>% 
   dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, poverty_percent, median_age_female, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race)
+##  make histogram to see the distribution of continuous variables 
+cancer1 = cancer %>% 
+  dplyr::select(-state, -county)
+cancer1 %>%
+  gather(measure, value) %>%
+  ggplot(aes(value)) +
+  facet_wrap(. ~ measure, scales = "free") +
+  geom_histogram()
 ```
 
 The original dataset has 35 variables and 3047 observations. 
