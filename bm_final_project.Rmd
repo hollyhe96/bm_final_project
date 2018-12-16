@@ -22,37 +22,28 @@ cancer = read_csv("./Cancer_Registry.csv") %>%
 
 ## demographic: age, race, marital status, income, education, employment and health insurance coverage
 
-library(patchwork)
-male = cancer %>% 
-  ggplot(aes(x = median_age_male)) + geom_histogram() + xlim(20, 66)
-
-female = cancer %>% 
-  ggplot(aes(x = median_age_female)) + geom_histogram() + xlim(20, 66)
-male + female
-## chose median_age_female for age
-
-income_employ_insur = cancer %>% 
-  dplyr::select(med_income, pct_employed16_over, pct_unemployed16_over, pct_private_coverage, pct_private_coverage_alone, pct_emp_priv_coverage, pct_public_coverage, pct_public_coverage_alone)
-cor(income_employ_insur)
-## income and health insurance coverage are highly correlated
-
+ses_cor = cancer %>% 
+  dplyr::select(med_income, poverty_percent, pct_unemployed16_over, pct_private_coverage, pct_emp_priv_coverage, pct_public_coverage, pct_public_coverage_alone)
+library(ggcorrplot)
+corr = round(cor(ses_cor), 1)
+ggcorrplot(corr, hc.order = TRUE, type = "lower", lab = TRUE)
+## income, employment status and health insurance coverage are highly correlated
+cancer %>% 
+  select(target_death_rate, med_income, poverty_percent) %>% 
+  ggscatmat() + geom_smooth(method = "lm")
+  
 income_edu = cancer %>% 
-  dplyr::select(target_death_rate, med_income, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_bach_deg25_over)
-cor(income_edu) 
+  dplyr::select(target_death_rate, poverty_percent, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_bach_deg25_over)
+corr = round(cor(income_edu), 1)
+ggcorrplot(corr, hc.order = TRUE, type = "lower", lab = TRUE)
 ## high correlation between med_income and pct_bach_deg25_over, pct_hs25_over and pct_bach_deg25_over, so choose pct_hs25_over
 
 ## Check with missing values
 skimr::skim(cancer %>% select(-state, -county))
 
-## define cutoff points
-summary(cancer$median_age_female) ##mean
-summary(cancer$med_income) ##quantile
-
 ## Select variables
 cancer = cancer %>% 
-  dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, binned_inc, median_age_female, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race) %>% 
-  mutate(binned_inc = ifelse(binned_inc %in% c("[22640, 34218.1]", "(34218.1, 37413.8]", "(37413.8, 40362.7]"), "low", ifelse(binned_inc %in% c("(54545.6, 61494.5]", "(61494.5, 125635]"), "high", "medium")),
-         binned_inc = factor(binned_inc, levels = c("low", "medium", "high")))
+  dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, poverty_percent, median_age_female, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race)
 ```
 
 The original dataset has 35 variables and 3047 observations. 
@@ -79,26 +70,31 @@ descp_stats = function(x){
   return(df)
 }
 
-cancer %>% 
+desp_var = cancer %>% 
   dplyr::select(-state, -county, -binned_inc) %>% 
   map_df(descp_stats) %>%
-  mutate(variable = c("target_death_rate", "incidence_rate", "study_per_cap", "median_age_female", "percent_married", "pct_no_hs18_24", "pct_hs18_24", "pct_bach_deg18_24", "pct_hs25_over", "pct_white", "pct_asian", "pct_other_race")) %>% 
-  dplyr::select(variable, mean, sd, everything()) %>%
-  knitr::kable(digits = 2)
+  mutate(minimum = round(minimum, 2),
+         q1 = round(q1, 2),
+         median = round(median, 2), 
+         mean = round(mean, 2),
+         q3 = round(q3, 2),
+         maximum = round(maximum, 2),
+         sd = round(sd, 2),    
+         variable = c("target_death_rate", "incidence_rate", "study_per_cap", "median_age_female", "percent_married", "pct_no_hs18_24", "pct_hs18_24", "pct_bach_deg18_24", "pct_hs25_over", "pct_white", "pct_asian", "pct_other_race")) %>% 
+  dplyr::select(variable, mean, sd, everything())
+write_csv(desp_var, "decp_var.csv")
 
 ## Distribution of the death rate
 cancer %>%
   ggplot(aes(x = target_death_rate)) + 
   geom_histogram(aes(y = ..density..)) + geom_density(color = "red") +
-  labs(x = "Death rate",
-       title = "Distribution of the death rate")
+  labs(x = "Death rate")
 
 ## Distribution of categorical variables
 cancer %>% 
   ggplot(aes(x = binned_inc, y = target_death_rate)) + geom_boxplot() +
   labs(x = "Income level", 
-       y = "Death rate",
-       title = "The relationship between income level and death rate")
+       y = "Death rate")
 ```
 
 The outcome 'death rate' is normally distributed.
@@ -115,9 +111,9 @@ fit = lm(target_death_rate ~ ., data = cancer_mod)
 summary(fit)
 
 step(fit, direction = "backward")
-refit = lm(target_death_rate ~ incidence_rate + binned_inc + 
-    median_age_female + percent_married + pct_hs18_24 + pct_bach_deg18_24 + 
-    pct_hs25_over + pct_white + pct_other_race, data = cancer_mod)
+refit = lm(target_death_rate ~ incidence_rate + poverty_percent + 
+    median_age_female + pct_hs18_24 + pct_bach_deg18_24 + pct_hs25_over + 
+    pct_white + pct_other_race, data = cancer_mod)
 vif(refit) ## check multicollinearity
 summary(refit)
 
@@ -135,6 +131,12 @@ influence.measures(refit)
 
 plot(refit)
 
+## refit the model without potential outliers
+mod_no = cancer_mod %>% slice(-282) %>% slice(-1220) 
+refit_no = lm(target_death_rate ~ incidence_rate + binned_inc + 
+    median_age_female + percent_married + pct_hs18_24 + pct_bach_deg18_24 + 
+    pct_hs25_over + pct_white + pct_other_race, data = cancer_mod)
+summary(refit_no)
 ```
 
 Model assumptions hold true.
@@ -142,28 +144,26 @@ Model assumptions hold true.
 ### Cp and adj R2 criteria
 
 ```{r}
-b<-regsubsets(target_death_rate ~ ., data=cancer_mod)
-   (rs<-summary(b))
+b = regsubsets(target_death_rate ~ ., data = cancer_mod, nvmax = 9)
+   (rs = summary(b))
 
 # Plots of Cp and Adj-R2 as functions of parameters
-par(mar=c(4,4,1,1))
-par(mfrow=c(1,2))
-plot(2:9, rs$cp, xlab="No of parameters", ylab="Cp Statistic")
+par(mar = c(4,4,1,1))
+par(mfrow = c(1,2))
+plot(2:10, rs$cp, xlab = "No of parameters", ylab = "Cp Statistic")
 abline(0,1)
-plot(2:9, rs$adjr2, xlab="No of parameters", ylab="Adj R2")
+plot(2:10, rs$adjr2, xlab = "No of parameters", ylab = "Adj R2")
 
-
-
+refit_2 = lm(target_death_rate ~ incidence_rate + poverty_percent + pct_hs18_24+ pct_hs25_over, data = cancer_mod)
+summary(refit_2)
+plot(refit_2)
 ```
 
-
-
-
-## Lasso regression
+### Lasso regression
 
 ```{r}
 cancer = cancer %>% 
-  dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, med_income, median_age_female, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race)
+  dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, poverty_percent, median_age_female, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race)
 
 cancer_mod = cancer %>% 
   dplyr::select(-state, -county)
@@ -177,7 +177,7 @@ ridge3<-glmnet(X, Y, alpha=1, lambda=grid)
 set.seed(2)
 cv.out<-cv.glmnet(X,Y)
 plot(cv.out)
-best.lambda<-cv.out$lambda.1se
+best.lambda<-cv.out$lambda.min
 lasso2<-glmnet(X, Y, alpha =1, lambda=best.lambda)
 coef(lasso2)
 
@@ -191,6 +191,29 @@ res_ls_ridge_lasso
 ## Cross validation
 
 ```{r}
+library(caret)
+
+# Use 5-fold validation and create the training sets
+
+data_train<-trainControl(method="cv", number=5)
+
+# Fit the 4-variables model that we discussed in previous lectures
+model_caret<-train(target_death_rate ~ incidence_rate + poverty_percent + median_age_female + pct_hs18_24 + pct_bach_deg18_24 + pct_hs25_over + pct_white + pct_other_race, 
+                   data = cancer_mod,
+                   method='lm',
+                   na.action=na.pass)
+  
+# Model predictions using 4 parts of the data fro training 
+model_caret
+
+model_caret_2<-train(target_death_rate ~ incidence_rate + poverty_percent + pct_hs18_24 + pct_hs25_over,
+                   data = cancer_mod,
+                   method='lm',
+                   na.action=na.pass)
+  
+# Model predictions using 4 parts of the data fro training 
+model_caret_2
+
 library(MPV)                           # For PRESS criterion
 
 newsummary <- function(model)
@@ -202,7 +225,7 @@ newsummary <- function(model)
                             'Rsq'   = summary(model)$adj.r.squared))
 }
 
+newsummary(refit_2)
 newsummary(refit)
-
 ```
 
