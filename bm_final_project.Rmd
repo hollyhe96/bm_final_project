@@ -167,7 +167,7 @@ lasso2$dev.ratio
 library(caret)
 
 # Use 5-fold validation and create the training sets
-
+set.seed(2)
 data_train<-trainControl(method="cv", number=5)
 
 # Fit the 4-variables model that we discussed in previous lectures
