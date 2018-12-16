@@ -29,7 +29,7 @@ corr = round(cor(ses_cor), 1)
 ggcorrplot(corr, hc.order = TRUE, type = "lower", lab = TRUE)
 ## income, employment status and health insurance coverage are highly correlated
 cancer %>% 
-  select(target_death_rate, med_income, poverty_percent) %>% 
+  dplyr::select(target_death_rate, med_income, poverty_percent) %>% 
   ggscatmat() + geom_smooth(method = "lm")
   
 income_edu = cancer %>% 
@@ -44,6 +44,7 @@ skimr::skim(cancer %>% select(-state, -county))
 ## Select variables
 cancer = cancer %>% 
   dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, poverty_percent, median_age_female, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race)
+
 ##  make histogram to see the distribution of continuous variables 
 cancer1 = cancer %>% 
   dplyr::select(-state, -county)
@@ -53,20 +54,6 @@ cancer1 %>%
   facet_wrap(. ~ measure, scales = "free") +
   geom_histogram()
 ```
-
-The original dataset has 35 variables and 3047 observations. 
-
-Both employment status and health insurance coverage status can be reflected by income. Thus, we only included income for subsequent analyses. We chose the variable 'binned_inc' from 'med_income', 'poverty_percent' and 'binned_inc' for measuring the income level. We combined some of its levels and divided income into 3 levels which are "low", "medium" and "high". We chose 'percent_married' from 'percent_married' and 'pct_married_households' for measuring the marital status. We chose 'median_age_female' from 'median_age', 'median_age_female' and 'median_age_male' for measuring the age. 'pct_white' and 'pct_black' are highly correlated, thus, we removed 'pct_black'. 'pct_hs25_over' and 'pct_bach_deg25_over' re highly correlated, thus, we removed 'pct_bach_deg25_over'. Finally, we included demographic variables for age, income, race, education and marital status for subsequent analyses which, in previous research, are also found to be correlated with cancer mortality.
-
-'pct_some_col18_24' was removed because of the relatively large amount of missing values. 
-We chose 'incidence_rate' from 'avg_ann_count' and 'incidence_rate' for measuring mean cancer diagnoses annually. We also remained the variable 'study_per_cap' for measuring number of cancer-related clinical trials per county. 
-
-In addition, because our outcome is 'target_death_rate' which can be calculated from dividing the variable 'avg_deaths_per_year' by the variable 'pop_est2015', we removed these two variables from our dataset. 'avg_household_size' and 'birth_rate' seem to be uncorrelated with the outcome, thus, we removed them from our dataset as well. 
-
-We ended with the dataset of 15 variables and 3047 observations. 
-
-Marital status is also correlated with cancer mortality. 
-https://www.ncbi.nlm.nih.gov/pubmed/29727804
 
 ## Data exploration
 
@@ -79,7 +66,7 @@ descp_stats = function(x){
 }
 
 desp_var = cancer %>% 
-  dplyr::select(-state, -county, -binned_inc) %>% 
+  dplyr::select(-state, -county) %>% 
   map_df(descp_stats) %>%
   mutate(minimum = round(minimum, 2),
          q1 = round(q1, 2),
@@ -88,28 +75,17 @@ desp_var = cancer %>%
          q3 = round(q3, 2),
          maximum = round(maximum, 2),
          sd = round(sd, 2),    
-         variable = c("target_death_rate", "incidence_rate", "study_per_cap", "median_age_female", "percent_married", "pct_no_hs18_24", "pct_hs18_24", "pct_bach_deg18_24", "pct_hs25_over", "pct_white", "pct_asian", "pct_other_race")) %>% 
+         variable = c("target_death_rate", "incidence_rate", "study_per_cap", "poverty_percent", "median_age_female", "percent_married", "pct_no_hs18_24", "pct_hs18_24", "pct_bach_deg18_24", "pct_hs25_over", "pct_white", "pct_asian", "pct_other_race")) %>% 
   dplyr::select(variable, mean, sd, everything())
 write_csv(desp_var, "decp_var.csv")
 
-## Distribution of the death rate
-cancer %>%
-  ggplot(aes(x = target_death_rate)) + 
-  geom_histogram(aes(y = ..density..)) + geom_density(color = "red") +
-  labs(x = "Death rate")
-
-## Distribution of categorical variables
-cancer %>% 
-  ggplot(aes(x = binned_inc, y = target_death_rate)) + geom_boxplot() +
-  labs(x = "Income level", 
-       y = "Death rate")
 ```
 
 The outcome 'death rate' is normally distributed.
 
 ## Fit the model
 
-### backward elimination
+### Stepwise regression
 
 ```{r}
 cancer_mod = cancer %>% 
@@ -118,18 +94,19 @@ cancer_mod = cancer %>%
 fit = lm(target_death_rate ~ ., data = cancer_mod)
 summary(fit)
 
-step(fit, direction = "backward")
+step(fit, direction = "both")
 refit = lm(target_death_rate ~ incidence_rate + poverty_percent + 
     median_age_female + pct_hs18_24 + pct_bach_deg18_24 + pct_hs25_over + 
     pct_white + pct_other_race, data = cancer_mod)
 vif(refit) ## check multicollinearity
 summary(refit)
-
+par(mfrow = c(2,2))
+plot(refit)
 ```
 
 Model assumptions hold true.
 
-### Cp and adj R2 criteria
+### Criteria-based procedures
 
 ```{r}
 b = regsubsets(target_death_rate ~ ., data = cancer_mod, nvmax = 9)
@@ -144,6 +121,7 @@ plot(2:10, rs$adjr2, xlab = "No of parameters", ylab = "Adj R2")
 
 refit_2 = lm(target_death_rate ~ incidence_rate + poverty_percent + pct_hs18_24+ pct_hs25_over, data = cancer_mod)
 summary(refit_2)
+par(mfrow = c(2,2))
 plot(refit_2)
 
 ## check outliers
@@ -167,13 +145,6 @@ summary(refit_no)
 ### Lasso regression
 
 ```{r}
-cancer = cancer %>% 
-  dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, poverty_percent, median_age_female, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race)
-
-cancer_mod = cancer %>% 
-  dplyr::select(-state, -county)
-
-## no NA
 Y <- as.matrix(cancer_mod[,1])
 X <- as.matrix(cancer_mod[,-1])
 grid <- 10^seq(5,-2, length=100)
@@ -187,15 +158,12 @@ lasso2<-glmnet(X, Y, alpha =1, lambda=best.lambda)
 coef(lasso2)
 
 lasso2$dev.ratio
-multi_fit = lm(target_death_rate ~ incidence_rate + study_per_cap + med_income + median_age_female + percent_married + pct_no_hs18_24 + pct_hs18_24 + pct_bach_deg18_24 + pct_hs25_over + pct_white + pct_asian + pct_other_race, data = cancer_mod)
-res_ls_ridge_lasso<- cbind(coef(multi_fit), coef(lasso2))
-colnames(res_ls_ridge_lasso) <- c("LS", "Lasso")
-res_ls_ridge_lasso
 ```
 
 ## Cross validation
 
 ```{r}
+## compare two models
 library(caret)
 
 # Use 5-fold validation and create the training sets
@@ -219,6 +187,7 @@ model_caret_2<-train(target_death_rate ~ incidence_rate + poverty_percent + pct_
 # Model predictions using 4 parts of the data fro training 
 model_caret_2
 
+## assess model predictive capability
 library(MPV)                           # For PRESS criterion
 
 newsummary <- function(model)
@@ -231,6 +200,5 @@ newsummary <- function(model)
 }
 
 newsummary(refit_2)
-newsummary(refit)
 ```
 
