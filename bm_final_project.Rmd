@@ -17,15 +17,18 @@ library(ggcorrplot)
 
 ## Data cleaning 
 
-```{r}
+```{r, eval = FALSE}
 cancer = read_csv("./Cancer_Registry.csv") %>% 
   janitor::clean_names() %>% 
   separate(geography, into = c("county", "state"), sep = ",")
 
-## demographic: age, race, marital status, income, education, employment and health insurance coverage
+## demographic: age, race, marital status, income, education, 
+## employment and health insurance coverage
 
 ses_cor = cancer %>% 
-  dplyr::select(med_income, poverty_percent, pct_unemployed16_over, pct_private_coverage, pct_emp_priv_coverage, pct_public_coverage, pct_public_coverage_alone)
+  dplyr::select(med_income, poverty_percent, pct_unemployed16_over, 
+                pct_private_coverage, pct_emp_priv_coverage, pct_public_coverage,
+                pct_public_coverage_alone)
 corr = round(cor(ses_cor), 1)
 ggcorrplot(corr, hc.order = TRUE, type = "lower", lab = TRUE)
 ## income, employment status and health insurance coverage are highly correlated
@@ -34,17 +37,22 @@ cancer %>%
   ggscatmat() + geom_smooth(method = "lm")
   
 income_edu = cancer %>% 
-  dplyr::select(target_death_rate, poverty_percent, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_bach_deg25_over)
+  dplyr::select(target_death_rate, poverty_percent, pct_no_hs18_24, pct_hs18_24, 
+                pct_bach_deg18_24, pct_hs25_over, pct_bach_deg25_over)
 corr = round(cor(income_edu), 1)
 ggcorrplot(corr, hc.order = TRUE, type = "lower", lab = TRUE)
-## high correlation between med_income and pct_bach_deg25_over, pct_hs25_over and pct_bach_deg25_over, so choose pct_hs25_over
+## pct_hs25_over and pct_bach_deg25_over are highly correlated
 
 ## Check with missing values
 skimr::skim(cancer %>% dplyr::select(-state, -county))
 
 ## Select variables
 cancer = cancer %>% 
-  dplyr::select(state, county, target_death_rate, incidence_rate, study_per_cap, poverty_percent, median_age_female, percent_married, pct_no_hs18_24, pct_hs18_24, pct_bach_deg18_24, pct_hs25_over, pct_white, pct_asian, pct_other_race)
+  dplyr::select(state, county, target_death_rate, incidence_rate, 
+                study_per_cap, poverty_percent, median_age_female, 
+                percent_married, pct_no_hs18_24, pct_hs18_24, 
+                pct_bach_deg18_24, pct_hs25_over, pct_white, 
+                pct_asian, pct_other_race)
 
 ##  make histogram to see the distribution of continuous variables 
 cancer1 = cancer %>% 
@@ -58,7 +66,7 @@ cancer1 %>%
 
 ## Data exploration
 
-```{r}
+```{r, eval = FALSE}
 ## Distribution of continuous variables
 descp_stats = function(x){
   df = broom::tidy(summary(x)) %>% 
@@ -76,7 +84,11 @@ desp_var = cancer %>%
          q3 = round(q3, 2),
          maximum = round(maximum, 2),
          sd = round(sd, 2),    
-         variable = c("target_death_rate", "incidence_rate", "study_per_cap", "poverty_percent", "median_age_female", "percent_married", "pct_no_hs18_24", "pct_hs18_24", "pct_bach_deg18_24", "pct_hs25_over", "pct_white", "pct_asian", "pct_other_race")) %>% 
+         variable = c("target_death_rate", "incidence_rate", "study_per_cap",
+                      "poverty_percent", "median_age_female", "percent_married",
+                      "pct_no_hs18_24", "pct_hs18_24", "pct_bach_deg18_24",
+                      "pct_hs25_over", "pct_white", "pct_asian", 
+                      "pct_other_race")) %>% 
   dplyr::select(variable, mean, sd, everything())
 write_csv(desp_var, "decp_var.csv")
 
@@ -86,7 +98,7 @@ write_csv(desp_var, "decp_var.csv")
 
 ### Stepwise regression
 
-```{r}
+```{r, eval = FALSE}
 cancer_mod = cancer %>% 
   dplyr::select(-state, -county)
 
@@ -105,7 +117,7 @@ plot(refit)
 
 ### Criteria-based procedures
 
-```{r}
+```{r, eval = FALSE}
 b = regsubsets(target_death_rate ~ ., data = cancer_mod, nvmax = 9)
    (rs = summary(b))
 
@@ -116,7 +128,8 @@ plot(2:10, rs$cp, xlab = "No of parameters", ylab = "Cp Statistic")
 abline(0,1)
 plot(2:10, rs$adjr2, xlab = "No of parameters", ylab = "Adj R2")
 
-refit_2 = lm(target_death_rate ~ incidence_rate + poverty_percent + pct_hs18_24+ pct_hs25_over, data = cancer_mod)
+refit_2 = lm(target_death_rate ~ incidence_rate + poverty_percent + 
+               pct_hs18_24+ pct_hs25_over, data = cancer_mod)
 summary(refit_2)
 par(mfrow = c(2,2))
 plot(refit_2)
@@ -135,13 +148,14 @@ influence.measures(refit_2)
 
 ## refit the model without potential outliers
 mod_no = cancer_mod %>% slice(-282) %>% slice(-1220) 
-refit_no = lm(target_death_rate ~ incidence_rate + poverty_percent + pct_hs18_24+ pct_hs25_over, data = cancer_mod)
+refit_no = lm(target_death_rate ~ incidence_rate + poverty_percent + 
+                pct_hs18_24+ pct_hs25_over, data = cancer_mod)
 summary(refit_no)
 ```
 
 ### Lasso regression
 
-```{r}
+```{r, eval = FALSE}
 Y <- as.matrix(cancer_mod[,1])
 X <- as.matrix(cancer_mod[,-1])
 grid <- 10^seq(5,-2, length=100)
@@ -159,29 +173,30 @@ lasso2$dev.ratio
 
 ## Cross validation
 
-```{r}
+```{r, eval = FALSE}
 ## compare two models
 library(caret)
 
-# Use 5-fold validation and create the training sets
+## 8-predictor model
 set.seed(2)
 data_train<-trainControl(method="cv", number=5)
 
-# Fit the 4-variables model that we discussed in previous lectures
-model_caret<-train(target_death_rate ~ incidence_rate + poverty_percent + median_age_female + pct_hs18_24 + pct_bach_deg18_24 + pct_hs25_over + pct_white + pct_other_race, 
+model_caret<-train(target_death_rate ~ incidence_rate + poverty_percent +
+                     median_age_female + pct_hs18_24 + pct_bach_deg18_24 + 
+                     pct_hs25_over + pct_white + pct_other_race, 
                    data = cancer_mod,
                    method='lm',
                    na.action=na.pass)
   
-# Model predictions using 4 parts of the data for training 
 model_caret
 
-model_caret_2<-train(target_death_rate ~ incidence_rate + poverty_percent + pct_hs18_24 + pct_hs25_over,
+## 4-predictor model
+model_caret_2<-train(target_death_rate ~ incidence_rate + poverty_percent + 
+                       pct_hs18_24 + pct_hs25_over,
                    data = cancer_mod,
                    method='lm',
                    na.action=na.pass)
-  
-# Model predictions using 4 parts of the data for training 
+
 model_caret_2
 
 ## assess model predictive capability
