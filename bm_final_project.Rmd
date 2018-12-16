@@ -117,26 +117,6 @@ refit = lm(target_death_rate ~ incidence_rate + poverty_percent +
 vif(refit) ## check multicollinearity
 summary(refit)
 
-## check outliers
-### outliers in Y
-stu_res = rstandard(refit)
-stu_res[abs(stu_res) > 2.5]
-
-### leverage
-hat_value = hatvalues(refit)
-hat_value[hat_value > 0.2]
-
-### influential points
-influence.measures(refit)
-
-plot(refit)
-
-## refit the model without potential outliers
-mod_no = cancer_mod %>% slice(-282) %>% slice(-1220) 
-refit_no = lm(target_death_rate ~ incidence_rate + binned_inc + 
-    median_age_female + percent_married + pct_hs18_24 + pct_bach_deg18_24 + 
-    pct_hs25_over + pct_white + pct_other_race, data = cancer_mod)
-summary(refit_no)
 ```
 
 Model assumptions hold true.
@@ -157,6 +137,23 @@ plot(2:10, rs$adjr2, xlab = "No of parameters", ylab = "Adj R2")
 refit_2 = lm(target_death_rate ~ incidence_rate + poverty_percent + pct_hs18_24+ pct_hs25_over, data = cancer_mod)
 summary(refit_2)
 plot(refit_2)
+
+## check outliers
+### outliers in Y
+stu_res = rstandard(refit_2)
+stu_res[abs(stu_res) > 2.5]
+
+### leverage
+hat_value = hatvalues(refit_2)
+hat_value[hat_value > 0.2]
+
+### influential points
+influence.measures(refit_2)
+
+## refit the model without potential outliers
+mod_no = cancer_mod %>% slice(-282) %>% slice(-1220) 
+refit_no = lm(target_death_rate ~ incidence_rate + poverty_percent + pct_hs18_24+ pct_hs25_over, data = cancer_mod)
+summary(refit_no)
 ```
 
 ### Lasso regression
