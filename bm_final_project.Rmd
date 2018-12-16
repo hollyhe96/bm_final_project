@@ -1,6 +1,6 @@
 ---
 title: "bm_final_project"
-author: "Yun He"
+author: "Adina, Henry, Haowei, Yun"
 date: "December 6, 2018"
 output: pdf_document
 ---
@@ -11,6 +11,8 @@ library(tidyverse)
 library(glmnet)
 library(HH)
 library(leaps)
+library(GGally)
+library(ggcorrplot)
 ```
 
 ## Data cleaning 
@@ -24,7 +26,6 @@ cancer = read_csv("./Cancer_Registry.csv") %>%
 
 ses_cor = cancer %>% 
   dplyr::select(med_income, poverty_percent, pct_unemployed16_over, pct_private_coverage, pct_emp_priv_coverage, pct_public_coverage, pct_public_coverage_alone)
-library(ggcorrplot)
 corr = round(cor(ses_cor), 1)
 ggcorrplot(corr, hc.order = TRUE, type = "lower", lab = TRUE)
 ## income, employment status and health insurance coverage are highly correlated
@@ -39,7 +40,7 @@ ggcorrplot(corr, hc.order = TRUE, type = "lower", lab = TRUE)
 ## high correlation between med_income and pct_bach_deg25_over, pct_hs25_over and pct_bach_deg25_over, so choose pct_hs25_over
 
 ## Check with missing values
-skimr::skim(cancer %>% select(-state, -county))
+skimr::skim(cancer %>% dplyr::select(-state, -county))
 
 ## Select variables
 cancer = cancer %>% 
@@ -81,8 +82,6 @@ write_csv(desp_var, "decp_var.csv")
 
 ```
 
-The outcome 'death rate' is normally distributed.
-
 ## Fit the model
 
 ### Stepwise regression
@@ -103,8 +102,6 @@ summary(refit)
 par(mfrow = c(2,2))
 plot(refit)
 ```
-
-Model assumptions hold true.
 
 ### Criteria-based procedures
 
@@ -176,7 +173,7 @@ model_caret<-train(target_death_rate ~ incidence_rate + poverty_percent + median
                    method='lm',
                    na.action=na.pass)
   
-# Model predictions using 4 parts of the data fro training 
+# Model predictions using 4 parts of the data for training 
 model_caret
 
 model_caret_2<-train(target_death_rate ~ incidence_rate + poverty_percent + pct_hs18_24 + pct_hs25_over,
@@ -184,7 +181,7 @@ model_caret_2<-train(target_death_rate ~ incidence_rate + poverty_percent + pct_
                    method='lm',
                    na.action=na.pass)
   
-# Model predictions using 4 parts of the data fro training 
+# Model predictions using 4 parts of the data for training 
 model_caret_2
 
 ## assess model predictive capability
