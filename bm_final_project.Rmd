@@ -1,6 +1,6 @@
 ---
 title: "bm_final_project"
-author: "Adina, Henry, Haowei, Yun"
+author: "Henry Chao, Yun He, Haowei Ni, Adina Zhang"
 date: "December 6, 2018"
 output: pdf_document
 ---
