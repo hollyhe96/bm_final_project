@@ -17,7 +17,7 @@ library(ggcorrplot)
 
 ## Data cleaning 
 
-```{r, eval = FALSE}
+```{r}
 cancer = read_csv("./Cancer_Registry.csv") %>% 
   janitor::clean_names() %>% 
   separate(geography, into = c("county", "state"), sep = ",")
@@ -66,7 +66,7 @@ cancer1 %>%
 
 ## Data exploration
 
-```{r, eval = FALSE}
+```{r}
 ## Distribution of continuous variables
 descp_stats = function(x){
   df = broom::tidy(summary(x)) %>% 
@@ -98,7 +98,7 @@ write_csv(desp_var, "decp_var.csv")
 
 ### Stepwise regression
 
-```{r, eval = FALSE}
+```{r}
 cancer_mod = cancer %>% 
   dplyr::select(-state, -county)
 
@@ -117,7 +117,7 @@ plot(refit)
 
 ### Criteria-based procedures
 
-```{r, eval = FALSE}
+```{r}
 b = regsubsets(target_death_rate ~ ., data = cancer_mod, nvmax = 9)
    (rs = summary(b))
 
@@ -155,7 +155,7 @@ summary(refit_no)
 
 ### Lasso regression
 
-```{r, eval = FALSE}
+```{r}
 Y <- as.matrix(cancer_mod[,1])
 X <- as.matrix(cancer_mod[,-1])
 grid <- 10^seq(5,-2, length=100)
@@ -173,7 +173,7 @@ lasso2$dev.ratio
 
 ## Cross validation
 
-```{r, eval = FALSE}
+```{r}
 ## compare two models
 library(caret)
 
